@@ -21,18 +21,23 @@
            :key="key"
            class="tn-pushButton ux-box"
            :class="`${key === 'powerstate' ? 'switch' : ''}`"
+           @click="handleButtonClick(key)"
       >
         <div class="ux-box__title">{{ item.text }}{{ item.switch ? '开' : '关' }}</div>
-        <div class="ux-box__desc" @click="handleButtonClick(key)">
+        <div class="ux-box__desc">
           <span :class="`icon-circle ${item.switch ? 'active' : ''}`"></span>
         </div>
       </div>
     </div>
     <!-- 设备状态 button -->
     <div class="tn-pushGroup">
-      <div v-for="(item, key) in deviceStatusButton" :key="key" class="tn-pushButton ux-box">
+      <div v-for="(item, key) in deviceStatusButton"
+           :key="key"
+           class="tn-pushButton ux-box"
+           @click="handleButtonClick(key, item.type)"
+      >
         <div class="ux-box__title">{{ item.text }}</div>
-        <div class="ux-box__desc" @click="handleButtonClick(key, item.type)">
+        <div class="ux-box__desc">
           <span>{{ item.desc }}</span>
           <svg aria-hidden="true" class="tn-icon"><use xlink:href="#icon-arrow"></use></svg>
         </div>
@@ -40,11 +45,11 @@
     </div>
     <!-- 设备状态 bar -->
     <div class="tn-pushBar" v-for="(item, key) in deviceStatusBar" :key="key">
-      <div class="tn-pushBar-item ux-box">
+      <div class="tn-pushBar-item ux-box" @click="handleButtonClick(key, item.type)">
         <div class="tn-pushBar__mid">
           <span class="ux-box__title">{{ item.text }}</span>
         </div>
-        <div class="ux-box__desc" @click="handleButtonClick(key, item.type)">
+        <div class="ux-box__desc">
           <span>{{ item.desc }}</span>
           <svg aria-hidden="true" class="tn-icon"><use xlink:href="#icon-arrow"></use></svg>
         </div>
@@ -230,6 +235,9 @@ export default {
           }
         }
       })
+      setTimeout(function () {
+        _this.$loading.close()
+      }, 3000);
     }
   }
 };
