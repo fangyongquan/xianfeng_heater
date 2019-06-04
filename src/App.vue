@@ -24,7 +24,7 @@ export default {
           ...state.base.navBarData,
           right: [
             {
-              content: 'https://img.alicdn.com/tfs/TB1yOtHB9zqK1RjSZFLXXcn2XXa-40-40.png',
+              content: 'https://img.alicdn.com/imgextra/i3/2759460135/O1CN011rT5vY1Crs0HFidSm_!!2759460135.png',
               eventFunc: () => {
                 AI.goWeexSetPage({
                   title: '设置'
