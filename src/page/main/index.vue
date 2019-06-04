@@ -1,79 +1,71 @@
 <template>
-  <div class="main">
+  <div class="main" :class="deviceInfo.onlinestate ? (deviceInfo.powerstate ? `switch-on` : `switch-off`) : 'disabled'">
     <!-- 设备信息 -->
     <div class="deviceInfo">
-      <div class="device-box">
-        <h1>25℃</h1>
+      <div v-if="!deviceInfo.onlinestate" >设备处于离线状态</div>
+      <div v-else-if="!deviceInfo.powerstate">
+        <p>设备处于关闭状态</p>
+        <p style="margin-top: 10px">点击开关开启</p>
+      </div>
+      <div v-else class="device-box">
+        <h1>{{ deviceInfo.temperature }}℃</h1>
         <p>当前温度</p>
       </div>
       <div class="device-bg">
-        <img :src="productInfo.img">
+        <img :src="deviceInfo.image">
       </div>
     </div>
-
-    <!--<img src="https://img.alicdn.com/tfs/TB1B3GmJkvoK1RjSZPfXXXPKFXa-104-104.png">-->
-
-
+    <!-- 设备状态 switch -->
+    <div class="tn-pushGroup">
+      <div v-for="(item, key) in deviceStatusSwitch"
+           :key="key"
+           class="tn-pushButton ux-box"
+           :class="`${key === 'powerstate' ? 'switch' : ''}`"
+      >
+        <div class="ux-box__title">{{ item.text }}{{ item.switch ? '开' : '关' }}</div>
+        <div class="ux-box__desc" @click="handleButtonClick(key)">
+          <span :class="`icon-circle ${item.switch ? 'active' : ''}`"></span>
+        </div>
+      </div>
+    </div>
     <!-- 设备状态 button -->
     <div class="tn-pushGroup">
       <div v-for="(item, key) in deviceStatusButton" :key="key" class="tn-pushButton ux-box">
         <div class="ux-box__title">{{ item.text }}</div>
-        <div class="ux-box__desc" @click="handleButtonClick(item.type, key)">
-          <sapn v-if="item.type === 'switch'" :class="`icon-circle ${item.value === 1 ? 'active' : ''}`"></sapn>
-          <template v-else>
-            <span>{{ item.desc }}</span>
-            <svg aria-hidden="true" class="tn-icon"><use xlink:href="#icon-arrow"></use></svg>
-          </template>
+        <div class="ux-box__desc" @click="handleButtonClick(key, item.type)">
+          <span>{{ item.desc }}</span>
+          <svg aria-hidden="true" class="tn-icon"><use xlink:href="#icon-arrow"></use></svg>
         </div>
       </div>
     </div>
     <!-- 设备状态 bar -->
-    <div class="tn-pushBar">
-      <div v-for="(item, key) in deviceStatusBar" :key="key" class="tn-pushBar-item ux-box">
-          <div class="tn-pushBar__mid">
-            <span class="ux-box__title">{{ item.text }}</span>
-          </div>
-          <div class="ux-box__desc" @click="handleButtonClick(item.type, key)">
-            <span>{{ item.desc }}</span>
-            <svg aria-hidden="true" class="tn-icon"><use xlink:href="#icon-arrow"></use></svg>
-          </div>
+    <div class="tn-pushBar" v-for="(item, key) in deviceStatusBar" :key="key">
+      <div class="tn-pushBar-item ux-box">
+        <div class="tn-pushBar__mid">
+          <span class="ux-box__title">{{ item.text }}</span>
+        </div>
+        <div class="ux-box__desc" @click="handleButtonClick(key, item.type)">
+          <span>{{ item.desc }}</span>
+          <svg aria-hidden="true" class="tn-icon"><use xlink:href="#icon-arrow"></use></svg>
+        </div>
       </div>
     </div>
 
-    <!-- 弹框 -->
-    <div class="actionDialog">
-      <!-- 弹框 - 加热档位heaterPower -->
-      <action-dialog :show.sync="heaterShow"
-                     :height="260"
-                     @confirm="onConfirm"
-                     title="加热档位"
-      >
-        <select-list v-if="heaterShow" :height="240" :info="selectHeaterPower" v-on:selectBack="handleSelectBack"></select-list>
-      </action-dialog>
-      <!-- 弹框 - 目标温度targetTemperature -->
-      <action-dialog :show.sync="tempShow"
-                     :height="260"
-                     @confirm="onConfirm"
-                     title="目标温度"
-      >
-        <select-list v-if="tempShow" :height="240" :info="selectTargetTemperature" v-on:selectBack="handleSelectBack"></select-list>
-      </action-dialog>
-      <!-- 弹框 - 模式mode -->
-      <action-dialog :show.sync="modeShow"
-                     :height="260"
-                     @confirm="onConfirm"
-                     title="工作模式"
-      >
-        <select-list v-if="modeShow" :height="240" :info="selectMode" v-on:selectBack="handleSelectBack"></select-list>
-      </action-dialog>
-    </div>
+    <!-- 弹框 - 工作模式 mode | 加热档位 heaterPower | 目标温度 targetTemperature -->
+    <action-dialog :show.sync="show"
+                   :height="260"
+                   :title="selectOption.title || '选择'"
+                   @confirm="handleOnConfirmAttr"
+    >
+      <select-list v-if="show" :height="240" :info="selectOption.data" v-on:selectBack="handleSelectBack"></select-list>
+    </action-dialog>
   </div>
 </template>
 
 <script type="text/ecmascript-6">
 import Vue from 'vue'
 import { mapState } from 'vuex';
-import { Loading, Toast, PushBar, PushGroup,PushButton, ActionDialog, SelectList } from 'genie-ui';
+import { Loading, Toast, PushBar, PushGroup, PushButton, ActionDialog, SelectList } from 'genie-ui';
 Vue.use(Loading)
 Vue.use(Toast)
 
@@ -88,106 +80,90 @@ export default {
   },
   data() {
     return {
-      heaterShow: false,
-      tempShow: false,
-      modeShow: false
+      active: null,
+      show: false,
+      select: []
     };
   },
   computed: {
     ...mapState({
-      // 在线状态
-      onlinestate: state => {
-        const onlinestate = state.publicInfo.attr.onlinestate;
-        return onlinestate === 1;
+      // 设备信息
+      deviceInfo(state) {
+        const attr = state.publicInfo.attr;
+        const on = 'https://img.alicdn.com/imgextra/i4/2759460135/O1CN01MOtsXa1Crs0FdYQLr_!!2759460135.png';
+        const off = 'https://img.alicdn.com/imgextra/i3/2759460135/O1CN01a2UTe61Crs0GoDtby_!!2759460135.png';
+        return {
+          ...attr,
+          image: attr.powerstate ? on : off
+        }
       },
-      // 开关状态
-      powerstate: state => {
-        const powerstate = state.publicInfo.attr.powerstate;
-        return powerstate === 1;
+      // 设备状态 switch
+      deviceStatusSwitch(state) {
+        const attr = state.publicInfo.attr;
+        return {
+          powerstate: { text: '设备', switch: attr.powerstate },
+          OSD: { text: '屏幕', switch: attr.OSD },
+          childLockOnOff: { text: '童锁', switch: attr.childLockOnOff }
+        }
       },
-      // 设备状态 button
+      // 设备状态 Button
       deviceStatusButton(state) {
         const attr = state.publicInfo.attr;
         return {
-          OSD: {
-            text: attr.OSD === 1 ? '屏幕开' : '屏幕关',
-            type: 'switch',
-            value: attr.OSD
+          mode: {
+            text: '工作模式',
+            type: 'arrow',
+            desc: state.setting.modeObj[attr.mode]
           },
           heaterPower: {
             text: '加热档位',
             type: 'arrow',
-            value: attr.heaterPower,
-            desc: state.publicInfo.heaterPower[attr.heaterPower]
-          },
-          childLockOnOff: {
-            text: attr.childLockOnOff === 1 ? '童锁开' : '童锁关',
-            type: 'switch',
-            value: attr.childLockOnOff
+            desc: state.setting.heaterPowerObj[attr.heaterPower]
           }
         }
       },
       // 设备状态 bar
       deviceStatusBar(state) {
         const attr = state.publicInfo.attr;
-        const data = { textColor: '#646464', descColor: '#323232' }
         return {
           targetTemperature: {
             text: '目标温度',
             type: 'arrow',
-            desc: `${attr.targetTemperature > 0 ? attr.targetTemperature : 15}℃`,
-            ...data
-          },
-          mode: {
-            text: '工作模式',
-            type: 'arrow',
-            desc: attr.mode ? state.publicInfo.mode[attr.mode] : '普通模式',
-            ...data
+            desc: attr.targetTemperature > 0 ? `${attr.targetTemperature}℃` : null
           }
         }
       },
-
       // 列表选择数据 - 加热档位
-      selectHeaterPower(state) {
-        const obj = state.publicInfo.heaterPower;
-        let values = [];
-        for(let key in obj) {
-          values.push({ text: obj[key], value: key })
+      selectOption(state) {
+        const key = this.active;
+        const attr = state.publicInfo.attr;
+        if (key === 'mode') {
+          return {
+            title: '工作模式',
+            data: [{ activeVal: state.setting.modeObj[attr.mode] || '', values: state.setting.modeValues }]
+          }
+        } else if (key === 'heaterPower') {
+          return {
+            title: '加热档位',
+            data: [{ activeVal: state.setting.heaterPowerObj[attr.heaterPower] || '', values: state.setting.heaterPowerValues }]
+          }
+        } else if (key === 'targetTemperature') {
+          let values = [];
+          for (let key = 15; key <= 35; key++) {
+            values.push({ text: key })
+          }
+          return {
+            title: '目标温度',
+            data: [{ activeVal: attr.targetTemperature, values: values, unit: '℃' }]
+          }
         }
-        return [{ activeVal: obj[state.publicInfo.attr.heaterPower] || '', values: values }]
+        return { title: '', data: [] }
       },
-      // 列表选择数据 - 目标温度
-      selectTargetTemperature(state) {
-        const activeVal = state.publicInfo.attr.targetTemperature;
-        let values = [];
-        for(let key = 15; key <= 35; key++) {
-          values.push({ text: `${key}℃`, value: key })
-        }
-        return [{ activeVal: activeVal, values: values }]
-      },
-      // 列表选择数据 - 工作模式
-      selectMode(state) {
-        const obj = state.publicInfo.mode;
-        let values = [];
-        for(let key in obj) {
-          values.push({ text: obj[key], value: key })
-        }
-        return [{ activeVal: obj[state.publicInfo.attr.mode] || '', values: values }]
-      },
-
-
-
-
-
-      // 产品信息详情
-      productInfo: state => {
-        return state.base.productInfo;
-      },
-    }),
+    })
   },
   created() {
-    // 设置topbar
     this.$nextTick(() => {
+      // 设置topbar,
       AI.setNavbar({
         title: '取暖器',
       })
@@ -198,30 +174,51 @@ export default {
   },
   methods: {
     // 点击按钮
-    handleButtonClick (type, key) {
-      if (key === 'powerstate') {
-        this.handleSetDeviceStatus({
-          powerstate: this.powerstate ? 0 : 1
-        })
-      } else if (key === 'OSD') {
-        this.handleSetDeviceStatus({
-          OSD: this.OSD ? 0 : 1
-        })
-      } else if (key === 'childLockOnOff') {
-        this.handleSetDeviceStatus({
-          childLockOnOff: this.childLockOnOff ? 0 : 1
-        })
-      } else if (key === 'targetTemperature') {
-        this.tempShow = !this.tempShow
-      } else if (key === 'mode') {
-        this.modeShow = !this.modeShow
-      } else if (key === 'heaterPower') {
-        this.heaterShow = !this.heaterShow
+    handleButtonClick(key, type = null) {
+      const attr = this.deviceInfo;
+      this.active = key
+      this.show = false
+      this.select = []
+
+      if (attr.onlinestate && (attr.powerstate || key === 'powerstate')) {
+        if (type === 'arrow') {
+          this.show = true
+        } else {
+          this.handleOnConfirmAttr()
+        }
       }
+      return false
+    },
+    // 选择select
+    handleSelectBack(val) {
+      this.select = val
+    },
+
+    // 获取修改设备属性
+    handleOnConfirmAttr() {
+      const attr = this.deviceInfo;
+      const key = this.active;
+      const select = this.select[0];
+      let option = {}
+
+      if (key === 'mode' || key === 'heaterPower') {
+        const array = key === 'mode' ? this.$store.state.setting.modeValues : this.$store.state.setting.heaterPowerValues
+        for (let item of array) {
+          if (item.text === select) {
+            option[key] = Number(item.value)
+            break;
+          }
+        }
+      } else if (key === 'targetTemperature') {
+        option.targetTemperature = Number(select)
+      } else if (key === 'powerstate' || key === 'OSD' || key === 'childLockOnOff') {
+        option[key] = attr[key] ? 0 : 1
+      }
+      this.handleSetDeviceStatus(option)
     },
 
     // 设置设备属性状态
-    handleSetDeviceStatus (attrs) {
+    handleSetDeviceStatus(attrs) {
       this.$loading.open()
       const _this = this
       this.$store.dispatch('setDeviceStatus', {
@@ -229,40 +226,11 @@ export default {
         callback: function (res) {
           _this.$loading.close()
           if (res.code !== 'SUCCEED') {
-            _this.$toast({ type: 'error', text: res.msg })
+            _this.$toast({type: 'error', text: res.msg})
           }
         }
       })
-    },
-
-    handleSelectBack (val) {
-      console.log(4444, val)
-    },
-
-    onConfirm (val) {
-      console.log(999999, 'confirm', val)
-    },
+    }
   }
 };
 </script>
-
-<!-- Add "scoped" attribute to limit CSS to this component only -->
-<style lang="less" scoped>
-.deviceInfo-1 {
-  display: flex;
-  height: 180px;
-  margin-bottom: 10px;
-  background-color: #fff;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  img {
-    height: 80px;
-  }
-  .title {
-    color: #4a4a4a;
-    font-weight: bold;
-    padding-top: 5px;
-  }
-}
-</style>

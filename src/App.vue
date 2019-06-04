@@ -19,7 +19,22 @@ export default {
   },
   computed: {
     ...mapState({
-      navBarData: state => state.base.navBarData
+      navBarData (state) {
+        return {
+          ...state.base.navBarData,
+          right: [
+            {
+              content: 'https://img.alicdn.com/tfs/TB1yOtHB9zqK1RjSZFLXXcn2XXa-40-40.png',
+              eventFunc: () => {
+                AI.goWeexSetPage({
+                  title: '设置'
+                });
+              },
+              type: 'image',
+            }
+          ]
+        }
+      }
     })
   },
 }
